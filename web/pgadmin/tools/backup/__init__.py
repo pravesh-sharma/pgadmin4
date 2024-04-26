@@ -236,10 +236,16 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
             return
         val = data.get(key, default_value)
         if val:
-            val = val.split()
-            for c_val in val:
-                args.append(param)
-                args.append(c_val)
+            if isinstance(val, list):
+                for c_val in val:
+                    args.append(param)
+                    if c_val.find("\"") > -1:
+                        c_val = c_val.replace("\"", "\"\"")
+                        c_val = "\"" + c_val + "\""
+                    args.append(c_val)
+                return
+            args.append(param)
+            args.append(val)
 
     if backup_obj_type != 'objects':
         args.append('--database')
@@ -317,7 +323,6 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     set_param('use_column_inserts', '--column-inserts')
     set_param('load_via_partition_root', '--load-via-partition-root',
               manager.version >= 110000)
-    set_param('with_oids', '--oids')
     set_param('enable_row_security', '--enable-row-security')
     set_value('exclude_table_data', '--exclude-table-data')
     set_value('table_and_children', '--table-and-children', None,
@@ -325,9 +330,18 @@ def _get_args_params_values(data, conn, backup_obj_type, backup_file, server,
     set_value('exclude_table_and_children', '--exclude-table-and-children',
               None, manager.version >= 160000)
     set_value('exclude_table_data_and_children',
-              '--exclude-table-data-and-children', None,
-              manager.version >= 160000)
+              '--exclude-table-data-and-children',
+              None,manager.version >= 160000)
     set_value('exclude_table', '--exclude-table')
+
+    args.extend(
+        functools.reduce(operator.iconcat, map(
+            lambda t: ['--exclude-table-data',
+                       r'{0}'.format(driver.qtIdent(conn, t)
+                                     .replace('"', '\"'))],
+            data.get('exclude_table_data', [])), []
+        )
+    )
 
     # Disable options
     set_param('disable_trigger', '--disable-triggers',
